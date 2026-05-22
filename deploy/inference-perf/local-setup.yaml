@@ -1,0 +1,75 @@
+job:
+  image:
+    repository: us-central1-docker.pkg.dev/bobzetian-gke-dev/azaminference/inference-perf
+    tag: dev
+    pullPolicy: Always
+
+logLevel: DEBUG
+
+token:
+  hfSecret:
+    name: llm-d-hf-token
+    key: HF_TOKEN
+
+config:
+  load:
+    type: poisson
+    interval: 30
+    stages:
+      
+      # Warmup — seat residents (~1×S)
+      - rate: 15
+        duration: 50            # 15*50  = 750
+
+      # Main ladder
+      - rate: 5
+        duration: 20
+      - rate: 10
+        duration: 20
+      - rate: 15
+        duration: 20
+      - rate: 20
+        duration: 20
+  api:
+    type: completion
+    streaming: true
+  server:
+    type: vllm
+    model_name: Qwen/Qwen3-32B
+    base_url: http://34.118.235.158
+  tokenizer:
+    pretrained_model_name_or_path: Qwen/Qwen3-32B
+  data:
+    type: bimodal
+    bimodal:
+      mode_a_ratio: 0.5
+      seed: 42
+
+      # Mode A requests (System prompt + Uniformly distributed User prompt)
+      mode_a_system_prompt_len: 20
+      mode_a_groups: 2
+      mode_a_user_prompt_len:
+        type: uniform
+        min: 10
+        max: 20
+      mode_a_output_len: 5
+
+      # Mode B requests (System prompt + Normally distributed User prompt)
+      mode_b_system_prompt_len: 100
+      mode_b_groups: 5
+      mode_b_user_prompt_len:
+        type: normal
+        mean: 500
+        std_dev: 50
+        min: 300
+        max: 700
+      mode_b_output_len: 50
+  report:
+    request_lifecycle:
+      summary: true
+      per_stage: true
+      per_request: false
+
+    storage:
+      local_storage:
+        path: /workspace

@@ -20,7 +20,7 @@ from inference_perf.apis.base import InferenceAPIData, LazyLoadInferenceAPIData
 from inference_perf.apis.completion import CompletionAPIData
 from inference_perf.apis.chat import ChatCompletionAPIData, ChatMessage
 from inference_perf.apis.user_session import LocalUserSession, UserSessionCompletionAPIData
-from inference_perf.config import APIConfig, APIType, DataConfig, Distribution, SyntheticMultimodalDatagenConfig
+from inference_perf.config import APIConfig, APIType, DataConfig, SyntheticMultimodalDatagenConfig
 from inference_perf.datagen.multimodal_sampling import (
     resolution_to_wh,
     sample_audio_duration,
@@ -39,7 +39,7 @@ from inference_perf.payloads import (
     VideoSpecUnion,
 )
 from inference_perf.utils.custom_tokenizer import CustomTokenizer
-from inference_perf.utils.numeric.distribution import sample_from_distribution
+from inference_perf.utils.distribution import resolve_distribution, sample_from_distribution
 
 from .base import DataGenerator, LazyLoadDataMixin
 from .datagen_utils import (
@@ -56,20 +56,6 @@ logger = logging.getLogger(__name__)
 # Shared Prefix Generator generates shared prefix in the prompts that are sent.
 # This can be used to benchmark prefix caching cases.
 class SharedPrefixDataGenerator(DataGenerator, LazyLoadDataMixin):
-    @staticmethod
-    def _resolve_distribution(
-        param: Union[int, Distribution],
-        legacy_dist: Optional[Distribution] = None,
-    ) -> Distribution:
-        """Resolve a Union[int, Distribution] + optional legacy Distribution into a Distribution."""
-        if isinstance(param, Distribution):
-            return param
-        # param is an int
-        if legacy_dist is not None:
-            return legacy_dist
-        # Fixed value: min=max=mean, std_dev=0
-        return Distribution(mean=float(param), min=param, max=param, std_dev=0.0)
-
     def __init__(self, api_config: APIConfig, config: DataConfig, tokenizer: Optional[CustomTokenizer]) -> None:
         super().__init__(api_config, config, tokenizer)
 
@@ -93,9 +79,9 @@ class SharedPrefixDataGenerator(DataGenerator, LazyLoadDataMixin):
         self.payload_multimodal: Optional[SyntheticMultimodalDatagenConfig] = config.multimodal
 
         # Resolve all parameters to Distribution
-        system_prompt_dist = self._resolve_distribution(self.shared_prefix.system_prompt_len)
-        question_dist = self._resolve_distribution(self.shared_prefix.question_len, self.shared_prefix.question_distribution)
-        output_dist = self._resolve_distribution(self.shared_prefix.output_len, self.shared_prefix.output_distribution)
+        system_prompt_dist = resolve_distribution(self.shared_prefix.system_prompt_len)
+        question_dist = resolve_distribution(self.shared_prefix.question_len, self.shared_prefix.question_distribution)
+        output_dist = resolve_distribution(self.shared_prefix.output_len, self.shared_prefix.output_distribution)
 
         # Generate per-group system prompt lengths
         self.system_prompt_lens_per_group: List[int] = sample_from_distribution(

@@ -25,6 +25,7 @@ from .weka_trace_replay_datagen import WekaTraceReplayDataGenerator
 from .conversation_replay_datagen import ConversationReplayDataGenerator
 from .multimodal_datagen import MultimodalDataGenerator
 from .visionarena_datagen import VisionArenaDataGenerator
+from .bimodal_datagen import BimodalDataGenerator
 
 __all__ = [
     "BaseGenerator",
@@ -44,4 +45,5 @@ __all__ = [
     "ConversationReplayDataGenerator",
     "MultimodalDataGenerator",
     "VisionArenaDataGenerator",
+    "BimodalDataGenerator",
 ]

@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 from math import log, sqrt
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, Optional, Union, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -177,3 +177,17 @@ def sample_from_distribution(
     result = np.round(clipped).astype(int)
     result = np.clip(result, config.min, config.max)
     return cast(NDArray[np.int_], result)
+
+
+def resolve_distribution(
+    param: Union[int, Distribution],
+    legacy_dist: Optional[Distribution] = None,
+) -> Distribution:
+    """Resolve a Union[int, Distribution] + optional legacy Distribution into a Distribution."""
+    from inference_perf.config import Distribution
+
+    if isinstance(param, Distribution):
+        return param
+    if legacy_dist is not None:
+        return legacy_dist
+    return Distribution(mean=float(param), min=param, max=param, std_dev=0.0)
