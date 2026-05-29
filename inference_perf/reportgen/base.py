@@ -906,20 +906,83 @@ class ReportGenerator:
                 lifecycle_reports.append(report_file)
 
         if report_config.request_lifecycle.per_request:
-            report_file = ReportFile(
-                name="per_request_lifecycle_metrics",
-                contents=[
-                    {
+            if report_config.request_lifecycle.metrics_only:
+                slim_contents = []
+                for metric in request_metrics:
+                    latency = metric.end_time - metric.start_time
+                    ttft = None
+                    tpot = None
+                    avg_itl = None
+
+                    response_metrics = metric.info.response_metrics
+                    if isinstance(response_metrics, StreamedResponseMetrics):
+                        output_token_times = response_metrics.output_token_times
+                        output_tokens = response_metrics.output_tokens
+
+                        if response_chunks := response_metrics.response_chunks:
+                            if tokenizer and not output_token_times:
+                                output_token_times = []
+                                parsed_chunks = []
+                                for chunk_str, chunk_time in zip(response_chunks, response_metrics.chunk_times, strict=True):
+                                    try:
+                                        data = json.loads(chunk_str)
+                                        if choices := data.get("choices"):
+                                            delta = choices[0]
+                                            text = delta.get("text") or delta.get("delta", {}).get("content")
+                                            if text:
+                                                parsed_chunks.append((text, chunk_time))
+                                    except json.JSONDecodeError:
+                                        continue
+
+                                accumulated_tokens = 0
+                                for text, chunk_time in parsed_chunks:
+                                    tokens_in_chunk = tokenizer.count_tokens(text)
+                                    if tokens_in_chunk > 0:
+                                        for _ in range(tokens_in_chunk):
+                                            output_token_times.append(chunk_time)
+                                        accumulated_tokens += tokens_in_chunk
+                                output_tokens = accumulated_tokens
+
+                        if output_token_times:
+                            ttft = output_token_times[0] - metric.start_time
+
+                            if output_tokens > 1 and len(output_token_times) > 1:
+                                duration = output_token_times[-1] - output_token_times[0]
+                                tpot = duration / (output_tokens - 1)
+
+                                itls = [t2 - t1 for t1, t2 in zip(output_token_times, output_token_times[1:])]
+                                avg_itl = sum(itls) / len(itls) if itls else None
+
+                    slim_contents.append({
                         "start_time": metric.start_time,
                         "end_time": metric.end_time,
-                        "request": metric.request_data,
-                        "response": metric.response_data,
-                        "info": metric.info.model_dump() if metric.info else None,
+                        "latency_sec": latency,
+                        "ttft_sec": ttft,
+                        "tpot_sec": tpot,
+                        "avg_itl_sec": avg_itl,
                         "error": metric.error.model_dump() if metric.error else None,
-                    }
-                    for metric in request_metrics
-                ],
-            )
+                        "lora_adapter": metric.info.lora_adapter if metric.info else None,
+                    })
+
+                report_file = ReportFile(
+                    name="per_request_lifecycle_metrics",
+                    contents=slim_contents,
+                )
+            else:
+                report_file = ReportFile(
+                    name="per_request_lifecycle_metrics",
+                    contents=[
+                        {
+                            "start_time": metric.start_time,
+                            "end_time": metric.end_time,
+                            "request": metric.request_data,
+                            "response": metric.response_data,
+                            "info": metric.info.model_dump() if metric.info else None,
+                            "error": metric.error.model_dump() if metric.error else None,
+                        }
+                        for metric in request_metrics
+                    ],
+                )
             lifecycle_reports.append(report_file)
 
         if report_config.request_lifecycle.per_adapter:
