@@ -43,8 +43,10 @@ class StreamInterruptedError(Exception):
 
 
 async def parse_sse_stream(
-    response: ClientResponse, extract_content: Callable[[dict[str, Any]], Optional[str]]
-) -> Tuple[str, List[float], str, List[str], Optional[dict[str, Any]]]:
+    response: ClientResponse,
+    extract_content: Callable[[dict[str, Any]], Optional[str]],
+    metrics_only: bool = False,
+) -> Tuple[str, List[float], str, List[str], Optional[dict[str, Any]], Optional[str]]:
     """
     Parse Server-Sent Events (SSE) stream and extract content.
 
@@ -58,9 +60,10 @@ async def parse_sse_stream(
         extract_content: Function to extract text content from parsed JSON data.
                         Should return the text content or None if not found.
                         Example: lambda data: data.get("choices", [{}])[0].get("delta", {}).get("content")
+        metrics_only: If True, drops raw JSON chunks and raw content to save memory.
 
     Returns:
-        Tuple of (output_text, chunk_times, raw_content, response_chunks, server_usage):
+        Tuple of (output_text, chunk_times, raw_content, response_chunks, server_usage, request_id):
         - output_text: The concatenated text content from all chunks
         - chunk_times: Timestamps for content-bearing chunks only. Role-only
           deltas, usage-only chunks, [DONE] signals, and unparseable messages
@@ -72,6 +75,7 @@ async def parse_sse_stream(
           (e.g. OpenAI trailing `{"choices":[],"usage":{...}}` or Anthropic
           `message.usage`/`message_delta.usage`). None if the server didn't
           emit usage.
+        - request_id: The request ID returned by the server (extracted from the first chunk).
     """
     output_text = ""
     chunk_times: List[float] = []
@@ -79,10 +83,12 @@ async def parse_sse_stream(
     raw_content = b""
     response_chunks: List[str] = []
     server_usage: Optional[dict[str, Any]] = None
+    request_id: Optional[str] = None
 
     try:
         async for chunk in response.content.iter_any():
-            raw_content += chunk
+            if not metrics_only:
+                raw_content += chunk
             buffer += chunk
             while b"\n\n" in buffer:
                 message, buffer = buffer.split(b"\n\n", 1)
@@ -96,6 +102,8 @@ async def parse_sse_stream(
                             break
                         try:
                             data = json.loads(data_str)
+                            if not request_id:
+                                request_id = data.get("id")
                             usage = data.get("usage")
                             if not isinstance(usage, dict):
                                 message_data = data.get("message")
@@ -106,7 +114,8 @@ async def parse_sse_stream(
                             if content := extract_content(data):
                                 output_text += content
                                 chunk_times.append(message_time)
-                                response_chunks.append(data_str.decode("utf-8", errors="ignore"))
+                                if not metrics_only:
+                                    response_chunks.append(data_str.decode("utf-8", errors="ignore"))
                         except (json.JSONDecodeError, IndexError):
                             continue
                 if done:
@@ -118,4 +127,11 @@ async def parse_sse_stream(
         # what the server actually sent instead of an empty response body.
         raise StreamInterruptedError(e, raw_content.decode("utf-8", errors="ignore")) from e
 
-    return output_text, chunk_times, raw_content.decode("utf-8", errors="ignore"), response_chunks, server_usage
+    return (
+        output_text,
+        chunk_times,
+        raw_content.decode("utf-8", errors="ignore") if not metrics_only else "",
+        response_chunks,
+        server_usage,
+        request_id,
+    )

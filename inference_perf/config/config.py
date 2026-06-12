@@ -121,7 +121,13 @@ def read_config(config_file: Optional[str] = None, cli_overrides: Optional[dict[
                 standard_stages.append(StandardLoadStage(**stage))
             merged_cfg["load"]["stages"] = standard_stages
 
+    # Propagate metrics_only to api config so workers can optimize collection
+    metrics_only = merged_cfg.get("report", {}).get("request_lifecycle", {}).get("metrics_only", False)
+    if "api" in merged_cfg:
+        merged_cfg["api"]["metrics_only"] = metrics_only
+
     logger.info(
         "Benchmarking with the following config:\n\n%s\n", yaml.dump(merged_cfg, sort_keys=False, default_flow_style=False)
     )
     return Config(**merged_cfg)
+

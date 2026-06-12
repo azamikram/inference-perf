@@ -39,6 +39,7 @@ class StreamedResponseMetrics(ResponseMetrics):
 
 
 class InferenceInfo(BaseModel):
+    vllm_request_id: Optional[str] = None
     request_metrics: RequestMetrics
     response_metrics: Optional[SerializeAsAny[ResponseMetrics]] = None
     extra_info: dict[str, Any] = {}

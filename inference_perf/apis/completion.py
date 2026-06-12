@@ -53,17 +53,39 @@ class CompletionAPIData(InferenceAPIData):
     ) -> InferenceInfo:
         if config.streaming:
             # Use shared streaming parser with completion-specific content extraction
-            output_text, chunk_times, raw_content, response_chunks, server_usage = await parse_sse_stream(
-                response, extract_content=lambda data: data.get("choices", [{}])[0].get("text")
+            output_text, chunk_times, raw_content, response_chunks, server_usage, vllm_request_id = await parse_sse_stream(
+                response,
+                extract_content=lambda data: data.get("choices", [{}])[0].get("text"),
+                metrics_only=config.metrics_only,
             )
 
+<<<<<<< HEAD
             prompt_len = tokenizer.count_tokens(self.prompt)
             # Generated text is a continuation, not a sequence start: counting it
             # with special tokens would add a BOS the server's completion_tokens
             # never contains.
             output_len = tokenizer.count_tokens(output_text, add_special_tokens=False)
+=======
+>>>>>>> e4ac1bc (metrics_only and vllm_request_id)
             self.model_response = output_text
+
+            # Try server_usage first, fall back to tokenizer
+            prompt_len = None
+            output_len = None
+            if server_usage:
+                prompt_len = server_usage.get("prompt_tokens")
+                output_len = server_usage.get("completion_tokens")
+
+            if prompt_len is None:
+                prompt_len = tokenizer.count_tokens(self.prompt)
+            if output_len is None:
+                # Generated text is a continuation, not a sequence start: counting it
+                # with special tokens would add a BOS the server's completion_tokens
+                # never contains.
+                output_len = tokenizer.count_tokens(output_text, add_special_tokens=False)
+
             return InferenceInfo(
+                vllm_request_id=vllm_request_id,
                 request_metrics=RequestMetrics(text=Text(input_tokens=prompt_len)),
                 response_metrics=StreamedResponseMetrics(
                     response_chunks=response_chunks,
@@ -73,22 +95,39 @@ class CompletionAPIData(InferenceAPIData):
                     server_usage=server_usage,
                 ),
                 lora_adapter=lora_adapter,
-                extra_info={"raw_response": raw_content},
+                extra_info={"raw_response": raw_content} if not config.metrics_only else {},
             )
         else:
             data = await response.json()
-            prompt_len = tokenizer.count_tokens(self.prompt)
+            server_usage = data.get("usage")
+            vllm_request_id = data.get("id")
+
+            prompt_len = None
+            output_len = None
+            if server_usage:
+                prompt_len = server_usage.get("prompt_tokens")
+                output_len = server_usage.get("completion_tokens")
+
+            if prompt_len is None:
+                prompt_len = tokenizer.count_tokens(self.prompt)
+
             choices = data.get("choices", [])
             if len(choices) == 0:
                 return InferenceInfo(
+                    vllm_request_id=vllm_request_id,
                     request_metrics=RequestMetrics(text=Text(input_tokens=prompt_len)),
                     lora_adapter=lora_adapter,
                 )
             output_text = choices[0].get("text", "")
-            output_len = tokenizer.count_tokens(output_text, add_special_tokens=False)
+            if output_len is None:
+                output_len = tokenizer.count_tokens(output_text, add_special_tokens=False)
             self.model_response = output_text
             return InferenceInfo(
+                vllm_request_id=vllm_request_id,
                 request_metrics=RequestMetrics(text=Text(input_tokens=prompt_len)),
-                response_metrics=UnaryResponseMetrics(output_tokens=output_len, server_usage=data.get("usage")),
+                response_metrics=UnaryResponseMetrics(
+                    output_tokens=output_len,
+                    server_usage=server_usage,
+                ),
                 lora_adapter=lora_adapter,
             )

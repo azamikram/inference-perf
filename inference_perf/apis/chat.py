@@ -543,15 +543,28 @@ class ChatCompletionAPIData(InferenceAPIData):
         self, response: ClientResponse, config: APIConfig, tokenizer: CustomTokenizer, lora_adapter: Optional[str] = None
     ) -> InferenceInfo:
         if config.streaming:
-            output_text, chunk_times, raw_content, response_chunks, server_usage = await parse_sse_stream(
-                response, extract_content=lambda data: data.get("choices", [{}])[0].get("delta", {}).get("content")
+            output_text, chunk_times, raw_content, response_chunks, server_usage, vllm_request_id = await parse_sse_stream(
+                response,
+                extract_content=lambda data: data.get("choices", [{}])[0].get("delta", {}).get("content"),
+                metrics_only=config.metrics_only,
             )
-            prompt_len = self._count_prompt_tokens(tokenizer)
-            # Generated text is a continuation, not a sequence start: counting it
-            # with special tokens would add a BOS the server's completion_tokens
-            # never contains.
-            output_len = tokenizer.count_tokens(output_text, add_special_tokens=False)
+            # Try server_usage first, fall back to tokenizer
+            prompt_len = None
+            output_len = None
+            if server_usage:
+                prompt_len = server_usage.get("prompt_tokens")
+                output_len = server_usage.get("completion_tokens")
+
+            if prompt_len is None:
+                prompt_len = self._count_prompt_tokens(tokenizer)
+            if output_len is None:
+                # Generated text is a continuation, not a sequence start: counting it
+                # with special tokens would add a BOS the server's completion_tokens
+                # never contains.
+                output_len = tokenizer.count_tokens(output_text, add_special_tokens=False)
+
             return InferenceInfo(
+                vllm_request_id=vllm_request_id,
                 request_metrics=self._build_request_metrics(prompt_len, output_len),
                 response_metrics=StreamedResponseMetrics(
                     response_chunks=response_chunks,
@@ -561,21 +574,38 @@ class ChatCompletionAPIData(InferenceAPIData):
                     server_usage=server_usage,
                 ),
                 lora_adapter=lora_adapter,
-                extra_info={"raw_response": raw_content},
+                extra_info={"raw_response": raw_content} if not config.metrics_only else {},
             )
 
         data = await response.json()
-        prompt_len = self._count_prompt_tokens(tokenizer)
+        server_usage = data.get("usage")
+        vllm_request_id = data.get("id")
+
+        prompt_len = None
+        output_len = None
+        if server_usage:
+            prompt_len = server_usage.get("prompt_tokens")
+            output_len = server_usage.get("completion_tokens")
+
+        if prompt_len is None:
+            prompt_len = self._count_prompt_tokens(tokenizer)
+
         choices = data.get("choices", [])
         if len(choices) == 0:
             return InferenceInfo(
+                vllm_request_id=vllm_request_id,
                 request_metrics=self._build_request_metrics(prompt_len, 0),
                 lora_adapter=lora_adapter,
             )
         output_text = "".join([choice.get("message", {}).get("content", "") for choice in choices])
-        output_len = tokenizer.count_tokens(output_text, add_special_tokens=False)
+        if output_len is None:
+            output_len = tokenizer.count_tokens(output_text, add_special_tokens=False)
         return InferenceInfo(
+            vllm_request_id=vllm_request_id,
             request_metrics=self._build_request_metrics(prompt_len, output_len),
-            response_metrics=UnaryResponseMetrics(output_tokens=output_len, server_usage=data.get("usage")),
+            response_metrics=UnaryResponseMetrics(
+                output_tokens=output_len,
+                server_usage=server_usage,
+            ),
             lora_adapter=lora_adapter,
         )

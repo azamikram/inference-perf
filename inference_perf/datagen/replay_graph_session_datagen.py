@@ -861,7 +861,7 @@ class SessionChatCompletionAPIData(ChatCompletionAPIData):
                 content = delta.get("content")
                 return str(content) if content is not None else None
 
-            text_content, chunk_times, raw_content, response_chunks, server_usage = await parse_sse_stream(
+            text_content, chunk_times, raw_content, response_chunks, server_usage, vllm_request_id = await parse_sse_stream(
                 response, extract_content=_extract_streaming_content
             )
 
@@ -895,6 +895,7 @@ class SessionChatCompletionAPIData(ChatCompletionAPIData):
                     tc_text = json.dumps([tool_call_chunks[i] for i in sorted(tool_call_chunks)], ensure_ascii=False)
                 output_len = tokenizer.count_tokens(output_text + tc_text)
             info = SessionInferenceInfo(
+                vllm_request_id=vllm_request_id,
                 request_metrics=RequestMetrics(text=Text(input_tokens=prompt_len)),
                 response_metrics=StreamedResponseMetrics(
                     response_chunks=response_chunks,
@@ -910,6 +911,7 @@ class SessionChatCompletionAPIData(ChatCompletionAPIData):
             )
         else:
             data = await response.json()
+            vllm_request_id = data.get("id")
             prompt_len = tokenizer.count_tokens("".join([_get_text(m.content) for m in self.messages]))
             choices = data.get("choices", [])
             output_message: Optional[Dict[str, Any]] = None
@@ -945,6 +947,7 @@ class SessionChatCompletionAPIData(ChatCompletionAPIData):
                     tc_text = json.dumps(tool_calls, ensure_ascii=False)
                 output_len = tokenizer.count_tokens(output_text + tc_text)
             info = SessionInferenceInfo(
+                vllm_request_id=vllm_request_id,
                 request_metrics=RequestMetrics(text=Text(input_tokens=prompt_len)),
                 response_metrics=UnaryResponseMetrics(output_tokens=output_len),
                 lora_adapter=lora_adapter,

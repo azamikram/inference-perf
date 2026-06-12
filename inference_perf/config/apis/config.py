@@ -61,3 +61,5 @@ class APIConfig(StrictBaseModel):
     slo_ttft_header: Optional[str] = None
     response_format: Optional[ResponseFormat] = None
     session_id_header_key: Optional[str] = None
+    metrics_only: bool = False
+
