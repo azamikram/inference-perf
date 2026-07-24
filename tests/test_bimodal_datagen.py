@@ -309,3 +309,98 @@ class TestBimodalDataGenerator:
         assert len(mode_b_output_lens) > 10
         assert all(length == 80 for length in mode_b_output_lens)
         assert len(set(mode_b_output_lens)) == 1
+
+    def test_shared_prefix_between_modes(self) -> None:
+        api_config, data_config = _make_config(
+            mode_a_user_prompt_len=10,
+            mode_a_output_len=5,
+            mode_b_user_prompt_len=100,
+            mode_b_output_len=50,
+            mode_a_ratio=0.5,
+            seed=42,
+        )
+        assert data_config.bimodal is not None
+        data_config.bimodal.mode_a_system_prompt_len = 20
+        data_config.bimodal.mode_a_groups = 2
+        data_config.bimodal.mode_b_system_prompt_len = 50
+        data_config.bimodal.mode_b_groups = 4
+        data_config.bimodal.share_prefix = True
+
+        tokenizer = _make_mock_tokenizer()
+        gen = BimodalDataGenerator(api_config, data_config, tokenizer)
+
+        assert len(gen.mode_a_system_prompts) == 2
+        assert len(gen.mode_b_system_prompts) == 4
+
+        # Verify that Mode B system prompts start with corresponding Mode A system prompts
+        for i in range(4):
+            a_group = i % 2
+            a_prompt = gen.mode_a_system_prompts[a_group]
+            b_prompt = gen.mode_b_system_prompts[i]
+            
+            assert b_prompt.startswith(a_prompt)
+            # The mock tokenizer count_tokens splits by space.
+            # a_prompt has 20 tokens, b_prompt has 50 tokens.
+            assert tokenizer.count_tokens(a_prompt) == 20
+            assert tokenizer.count_tokens(b_prompt) == 50
+
+    def test_shared_prefix_between_modes_reverse(self) -> None:
+        api_config, data_config = _make_config(
+            mode_a_user_prompt_len=10,
+            mode_a_output_len=5,
+            mode_b_user_prompt_len=100,
+            mode_b_output_len=50,
+            mode_a_ratio=0.5,
+            seed=42,
+        )
+        assert data_config.bimodal is not None
+        data_config.bimodal.mode_a_system_prompt_len = 50
+        data_config.bimodal.mode_a_groups = 4
+        data_config.bimodal.mode_b_system_prompt_len = 20
+        data_config.bimodal.mode_b_groups = 2
+        data_config.bimodal.share_prefix = True
+
+        tokenizer = _make_mock_tokenizer()
+        gen = BimodalDataGenerator(api_config, data_config, tokenizer)
+
+        assert len(gen.mode_a_system_prompts) == 4
+        assert len(gen.mode_b_system_prompts) == 2
+
+        # Verify that Mode A system prompts start with corresponding Mode B system prompts
+        for i in range(4):
+            b_group = i % 2
+            b_prompt = gen.mode_b_system_prompts[b_group]
+            a_prompt = gen.mode_a_system_prompts[i]
+            
+            assert a_prompt.startswith(b_prompt)
+            assert tokenizer.count_tokens(b_prompt) == 20
+            assert tokenizer.count_tokens(a_prompt) == 50
+
+    def test_shared_prefix_between_modes_equal(self) -> None:
+        api_config, data_config = _make_config(
+            mode_a_user_prompt_len=10,
+            mode_a_output_len=5,
+            mode_b_user_prompt_len=100,
+            mode_b_output_len=50,
+            mode_a_ratio=0.5,
+            seed=42,
+        )
+        assert data_config.bimodal is not None
+        data_config.bimodal.mode_a_system_prompt_len = 30
+        data_config.bimodal.mode_a_groups = 2
+        data_config.bimodal.mode_b_system_prompt_len = 30
+        data_config.bimodal.mode_b_groups = 4
+        data_config.bimodal.share_prefix = True
+
+        tokenizer = _make_mock_tokenizer()
+        gen = BimodalDataGenerator(api_config, data_config, tokenizer)
+
+        assert len(gen.mode_a_system_prompts) == 2
+        assert len(gen.mode_b_system_prompts) == 4
+
+        # Verify they are identical
+        for i in range(4):
+            a_group = i % 2
+            a_prompt = gen.mode_a_system_prompts[a_group]
+            b_prompt = gen.mode_b_system_prompts[i]
+            assert a_prompt == b_prompt

@@ -49,3 +49,4 @@ class BimodalConfig(BaseModel):
 
     mode_a_ratio: float = Field(0.5, ge=0.0, le=1.0, description="Proportion of Mode A requests (0.0 to 1.0)")
     seed: Optional[int] = Field(None, description="Random seed for reproducibility")
+    share_prefix: bool = Field(False, description="Whether Mode A and Mode B should share a prefix")

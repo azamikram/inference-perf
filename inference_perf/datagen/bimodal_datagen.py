@@ -55,25 +55,74 @@ class BimodalDataGenerator(DataGenerator, LazyLoadDataMixin):
         self.mode_b_user_prompt_dist = resolve_distribution(self.bimodal_config.mode_b_user_prompt_len)
         self.mode_b_output_dist = resolve_distribution(self.bimodal_config.mode_b_output_len)
 
-        # Pre-generate Mode A system prompts if configured
         self.mode_a_system_prompts: List[str] = []
-        if self.bimodal_config.mode_a_system_prompt_len > 0:
-            for i in range(self.bimodal_config.mode_a_groups):
-                # Seed for this system prompt, offset to avoid collision with request seeds
-                prefix_seed = self.seed + 100_000 + i
-                self.mode_a_system_prompts.append(
-                    self._generate_exact_length_text(self.bimodal_config.mode_a_system_prompt_len, prefix_seed)
-                )
-
-        # Pre-generate Mode B system prompts if configured
         self.mode_b_system_prompts: List[str] = []
-        if self.bimodal_config.mode_b_system_prompt_len > 0:
-            for i in range(self.bimodal_config.mode_b_groups):
-                # Seed for this system prompt, offset to avoid collision with request seeds
-                prefix_seed = self.seed + 200_000 + i
-                self.mode_b_system_prompts.append(
-                    self._generate_exact_length_text(self.bimodal_config.mode_b_system_prompt_len, prefix_seed)
+
+        L_A = self.bimodal_config.mode_a_system_prompt_len
+        L_B = self.bimodal_config.mode_b_system_prompt_len
+        G_A = self.bimodal_config.mode_a_groups
+        G_B = self.bimodal_config.mode_b_groups
+
+        if self.bimodal_config.share_prefix:
+            if L_A == 0 or L_B == 0:
+                logger.warning(
+                    "share_prefix is True but one of the system prompt lengths is 0. "
+                    "No prefix will be shared."
                 )
+            
+            if L_A < L_B:
+                # Generate A first
+                for i in range(G_A):
+                    prefix_seed = self.seed + 100_000 + i
+                    self.mode_a_system_prompts.append(
+                        self._generate_exact_length_text(L_A, prefix_seed)
+                    )
+                # Generate B using A as prefix
+                for i in range(G_B):
+                    prefix_seed = self.seed + 200_000 + i
+                    shared_prefix = self.mode_a_system_prompts[i % G_A] if G_A > 0 else ""
+                    self.mode_b_system_prompts.append(
+                        self._generate_exact_length_text(L_B, prefix_seed, prefix_text=shared_prefix)
+                    )
+            elif L_B < L_A:
+                # Generate B first
+                for i in range(G_B):
+                    prefix_seed = self.seed + 200_000 + i
+                    self.mode_b_system_prompts.append(
+                        self._generate_exact_length_text(L_B, prefix_seed)
+                    )
+                # Generate A using B as prefix
+                for i in range(G_A):
+                    prefix_seed = self.seed + 100_000 + i
+                    shared_prefix = self.mode_b_system_prompts[i % G_B] if G_B > 0 else ""
+                    self.mode_a_system_prompts.append(
+                        self._generate_exact_length_text(L_A, prefix_seed, prefix_text=shared_prefix)
+                    )
+            else:  # L_A == L_B
+                # They are equal, they should be identical
+                for i in range(G_A):
+                    prefix_seed = self.seed + 100_000 + i
+                    self.mode_a_system_prompts.append(
+                        self._generate_exact_length_text(L_A, prefix_seed)
+                    )
+                for i in range(G_B):
+                    self.mode_b_system_prompts.append(
+                        self.mode_a_system_prompts[i % G_A] if G_A > 0 else ""
+                    )
+        else:
+            # Original behavior
+            if L_A > 0:
+                for i in range(G_A):
+                    prefix_seed = self.seed + 100_000 + i
+                    self.mode_a_system_prompts.append(
+                        self._generate_exact_length_text(L_A, prefix_seed)
+                    )
+            if L_B > 0:
+                for i in range(G_B):
+                    prefix_seed = self.seed + 200_000 + i
+                    self.mode_b_system_prompts.append(
+                        self._generate_exact_length_text(L_B, prefix_seed)
+                    )
 
     def get_supported_apis(self) -> List[APIType]:
         return [APIType.Completion]
@@ -103,14 +152,14 @@ class BimodalDataGenerator(DataGenerator, LazyLoadDataMixin):
         int_val = int(hash_val[:8], 16)
         return int_val % num_groups
 
-    def _generate_exact_length_text(self, target_len: int, request_seed: int) -> str:
+    def _generate_exact_length_text(self, target_len: int, request_seed: int, prefix_text: str = "") -> str:
         """Generates a string that tokenizes to exactly target_len."""
         if self.tokenizer is None:
             raise ValueError("Tokenizer is required for generating exact length prompts.")
         # Use a request-specific RNG to ensure independence of request generation order if parallelized,
         # but still deterministic for the same request index.
         request_rng = np.random.default_rng(request_seed)
-        return generate_random_exact_length_text(request_rng, self.valid_token_ids, self.tokenizer, target_len)
+        return generate_random_exact_length_text(request_rng, self.valid_token_ids, self.tokenizer, target_len, prefix_text)
 
     def load_lazy_data(self, data: LazyLoadInferenceAPIData) -> InferenceAPIData:
         n = data.data_index
