@@ -156,10 +156,20 @@ class BimodalDataGenerator(DataGenerator, LazyLoadDataMixin):
         """Generates a string that tokenizes to exactly target_len."""
         if self.tokenizer is None:
             raise ValueError("Tokenizer is required for generating exact length prompts.")
-        # Use a request-specific RNG to ensure independence of request generation order if parallelized,
-        # but still deterministic for the same request index.
         request_rng = np.random.default_rng(request_seed)
-        return generate_random_exact_length_text(request_rng, self.valid_token_ids, self.tokenizer, target_len, prefix_text)
+        if prefix_text:
+            prefix_len = self.tokenizer.count_tokens(prefix_text)
+            needed_len = target_len - prefix_len
+            if needed_len <= 0:
+                return prefix_text
+            suffix_text, _ = generate_random_exact_length_text(
+                request_rng, self.valid_token_ids, self.tokenizer, needed_len
+            )
+            return f"{prefix_text} {suffix_text}"
+        text, _ = generate_random_exact_length_text(
+            request_rng, self.valid_token_ids, self.tokenizer, target_len
+        )
+        return text
 
     def load_lazy_data(self, data: LazyLoadInferenceAPIData) -> InferenceAPIData:
         n = data.data_index

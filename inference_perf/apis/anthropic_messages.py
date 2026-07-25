@@ -261,7 +261,7 @@ async def parse_anthropic_stream_response(
     response: ClientResponse,
 ) -> tuple[str, dict[str, Any], list[float], str, list[str], dict[str, Any] | None]:
     extract_content, build_output_message = _build_anthropic_stream_handlers()
-    output_text, chunk_times, raw_content, response_chunks, server_usage = await parse_sse_stream(
+    output_text, chunk_times, raw_content, response_chunks, server_usage, _ = await parse_sse_stream(
         response,
         extract_content=extract_content,
     )

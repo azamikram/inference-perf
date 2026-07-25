@@ -39,7 +39,7 @@ async def test_parse_sse_stream() -> None:
     def extract_content(data: dict[str, Any]) -> Optional[str]:
         return data.get("choices", [{}])[0].get("delta", {}).get("content")  # type: ignore[no-any-return]
 
-    output_text, chunk_times, raw_content, response_chunks, server_usage = await parse_sse_stream(
+    output_text, chunk_times, raw_content, response_chunks, server_usage, _ = await parse_sse_stream(
         mock_response, extract_content
     )
 
@@ -87,7 +87,7 @@ async def test_parse_sse_stream_timestamps_only_content_events() -> None:
     def extract_content(data: dict[str, Any]) -> Optional[str]:
         return data.get("choices", [{}])[0].get("delta", {}).get("content")  # type: ignore[no-any-return]
 
-    output_text, chunk_times, _, response_chunks, server_usage = await parse_sse_stream(mock_response, extract_content)
+    output_text, chunk_times, _, response_chunks, server_usage, _ = await parse_sse_stream(mock_response, extract_content)
 
     assert output_text == "Hello world"
     assert len(chunk_times) == 2, (
