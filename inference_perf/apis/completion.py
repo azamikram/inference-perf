@@ -59,14 +59,6 @@ class CompletionAPIData(InferenceAPIData):
                 metrics_only=config.metrics_only,
             )
 
-<<<<<<< HEAD
-            prompt_len = tokenizer.count_tokens(self.prompt)
-            # Generated text is a continuation, not a sequence start: counting it
-            # with special tokens would add a BOS the server's completion_tokens
-            # never contains.
-            output_len = tokenizer.count_tokens(output_text, add_special_tokens=False)
-=======
->>>>>>> e4ac1bc (metrics_only and vllm_request_id)
             self.model_response = output_text
 
             # Try server_usage first, fall back to tokenizer
