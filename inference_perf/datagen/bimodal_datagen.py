@@ -20,7 +20,7 @@ import numpy as np
 from inference_perf.apis import CompletionAPIData, InferenceAPIData, LazyLoadInferenceAPIData
 from inference_perf.config import APIConfig, APIType, DataConfig
 from inference_perf.utils.custom_tokenizer import CustomTokenizer
-from inference_perf.utils.distribution import resolve_distribution, sample_from_distribution
+from inference_perf.utils.numeric.distribution import resolve_distribution, sample_from_distribution
 from .base import DataGenerator, LazyLoadDataMixin
 from .datagen_utils import generate_random_exact_length_text, init_vocab_sampling
 
