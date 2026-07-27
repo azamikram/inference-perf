@@ -14,7 +14,8 @@ These command line flags are automatically generated from the internal `Config` 
 | `--api.response_format.name` | str | Matches api.response_format.name in config |
 | `--api.response_format.json_schema` | JSON | Matches api.response_format.json_schema in config |
 | `--api.session_id_header_key` | str | Matches api.session_id_header_key in config |
-| `--data.type` | Enum (mock, shareGPT, synthetic, random, shared_prefix, cnn_dailymail, infinity_instruct, billsum_conversations, otel_trace_replay, weka_trace_replay, conversation_replay, visionarena) | Matches data.type in config |
+| `--api.metrics_only` | boolean | Matches api.metrics_only in config |
+| `--data.type` | Enum (mock, shareGPT, synthetic, random, shared_prefix, cnn_dailymail, infinity_instruct, billsum_conversations, otel_trace_replay, weka_trace_replay, conversation_replay, visionarena, bimodal) | Matches data.type in config |
 | `--data.path` | str | Matches data.path in config |
 | `--data.corpus_file_path` | str | Path to a text file to use as the prompt tokenization corpus instead of the default hardcoded sonnet |
 | `--data.input_distribution.min` | int | Matches data.input_distribution.min in config |
@@ -216,6 +217,17 @@ Any extra keys in the dict are passed as kwargs to datasets.load_dataset(). |
 | `--data.visionarena.num_rows` | int | Number of usable rows to stream into the in-memory request pool at startup. Caps memory use; the benchmark cycles through this pool. |
 | `--data.visionarena.max_images_per_request` | int | Cap on images attached per request; truncates a row's image list. |
 | `--data.visionarena.insertion_point` | string | Placement of the image block(s) within the prompt text. Float in [0.0, 1.0] (0=start, 1=end), or a Distribution to sample per request. |
+| `--data.bimodal.mode_a_system_prompt_len` | int | Length of shared system prompt prefix (KV cache) for Mode A requests |
+| `--data.bimodal.mode_a_groups` | int | Number of KV cache groups for Mode A requests |
+| `--data.bimodal.mode_a_user_prompt_len` | string | Length or distribution of Mode A user prompt in tokens |
+| `--data.bimodal.mode_a_output_len` | string | Length or distribution of Mode A output generation in tokens |
+| `--data.bimodal.mode_b_system_prompt_len` | int | Length of shared system prompt prefix (KV cache) for Mode B requests |
+| `--data.bimodal.mode_b_groups` | int | Number of KV cache groups for Mode B requests |
+| `--data.bimodal.mode_b_user_prompt_len` | string | Length or distribution of Mode B user prompt in tokens |
+| `--data.bimodal.mode_b_output_len` | string | Length or distribution of Mode B output generation in tokens |
+| `--data.bimodal.mode_a_ratio` | float | Proportion of Mode A requests (0.0 to 1.0) |
+| `--data.bimodal.seed` | int | Random seed for reproducibility |
+| `--data.bimodal.share_prefix` | boolean | Whether Mode A and Mode B should share a prefix |
 | `--load.type` | Enum (constant, poisson, trace_replay, concurrent, trace_session_replay) | Matches load.type in config |
 | `--load.interval` | float | Matches load.interval in config |
 | `--load.stages` | JSON | Matches load.stages in config |
@@ -242,6 +254,7 @@ Any extra keys in the dict are passed as kwargs to datasets.load_dataset(). |
 | `--report.request_lifecycle.summary` | boolean | Matches report.request_lifecycle.summary in config |
 | `--report.request_lifecycle.per_stage` | boolean | Matches report.request_lifecycle.per_stage in config |
 | `--report.request_lifecycle.per_request` | boolean | Matches report.request_lifecycle.per_request in config |
+| `--report.request_lifecycle.metrics_only` | boolean | Matches report.request_lifecycle.metrics_only in config |
 | `--report.request_lifecycle.per_adapter` | boolean | Matches report.request_lifecycle.per_adapter in config |
 | `--report.request_lifecycle.per_adapter_stage` | boolean | Matches report.request_lifecycle.per_adapter_stage in config |
 | `--report.request_lifecycle.percentiles` | JSON | Matches report.request_lifecycle.percentiles in config |
